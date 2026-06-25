@@ -1,0 +1,127 @@
+/* About Section */
+
+.about-section-zen {
+  padding: 100px 0;
+  background: var(--zen-surface);
+  position: relative;
+}
+
+/* Slide-in animation states */
+.about-text-col {
+  opacity: 0;
+  transform: translateX(-50px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.about-stats-col {
+  opacity: 0;
+  transform: translateX(50px);
+  transition: opacity 0.8s ease 0.15s, transform 0.8s ease 0.15s;
+}
+
+.about-section-zen.in-view .about-text-col,
+.about-section-zen.in-view .about-stats-col {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Layout */
+.about-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 5rem;
+}
+
+/* Benefit rows */
+.about-benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.about-benefit__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--zen-primary-10);
+  color: var(--zen-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Stats grid */
+.about-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.about-stat-tile {
+  background: var(--zen-bg);
+  border-radius: var(--zen-radius-md);
+  padding: 28px 24px;
+  border: 1px solid rgba(124,111,224,0.08);
+  box-shadow: var(--zen-shadow-sm);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.about-stat-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--zen-shadow-md);
+}
+
+.about-stat-tile--wide {
+  grid-column: 1 / -1;
+}
+
+.about-stat-tile--accent {
+  background: linear-gradient(135deg, var(--zen-primary-10), var(--zen-accent-soft));
+  border-color: rgba(124,111,224,0.14);
+}
+
+.about-stat-tile__value {
+  font-family: 'Urbanist', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--zen-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.about-stat-tile__label {
+  font-family: 'Lato', sans-serif;
+  font-size: 0.85rem;
+  color: var(--zen-text-secondary);
+}
+
+.about-stat-tile__quote {
+  font-family: 'Lato', sans-serif;
+  font-size: 0.92rem;
+  color: var(--zen-text-primary);
+  line-height: 1.65;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.about-stat-tile__author {
+  font-family: 'Urbanist', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--zen-primary);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .about-inner {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .about-section-zen {
+    padding: 70px 0;
+  }
+}

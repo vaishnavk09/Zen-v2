@@ -1,0 +1,84 @@
+/* Features Section */
+
+.features-section {
+  padding: 100px 0;
+  background: var(--zen-bg-2);
+  position: relative;
+  overflow: hidden;
+}
+
+.features-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(124,111,224,0.08) 1px, transparent 0);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* Bento grid */
+.features-bento {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+/* Feature card */
+.feature-card-zen {
+  display: flex;
+  flex-direction: column;
+  background: var(--zen-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(124, 111, 224, 0.10);
+  border-radius: var(--zen-radius-lg);
+  padding: 32px;
+  box-shadow: var(--zen-shadow-sm);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card-zen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.6) 0%, transparent 60%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.feature-card-zen:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--zen-shadow-lg);
+  border-color: rgba(124, 111, 224, 0.20);
+}
+
+.feature-card-zen__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--zen-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .features-bento {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .features-section {
+    padding: 70px 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .features-bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
