@@ -88,11 +88,20 @@ exports.updateJournal = async (req, res, next) => {
         message: 'Not authorized to update this journal entry'
       });
     }
+
+    const { encrypt, decrypt } = require('../utils/encryption');
+    if (req.body.content) {
+      req.body.content = encrypt(req.body.content);
+    }
     
     journal = await Journal.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
     });
+
+    if (journal && journal.content) {
+      journal.content = decrypt(journal.content);
+    }
     
     res.status(200).json({
       success: true,

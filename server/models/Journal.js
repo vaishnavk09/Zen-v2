@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { encrypt, decrypt } = require('../utils/encryption');
 
 const JournalSchema = new mongoose.Schema({
   title: {
@@ -27,4 +28,20 @@ const JournalSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Journal', JournalSchema); 
+// Transparently encrypt content before saving
+JournalSchema.pre('save', function (next) {
+  if (this.isModified('content')) {
+    this.content = encrypt(this.content);
+  }
+  next();
+});
+
+// Transparently decrypt content when retrieving documents
+JournalSchema.post('init', function (doc) {
+  if (doc && doc.content) {
+    doc.content = decrypt(doc.content);
+  }
+});
+
+module.exports = mongoose.model('Journal', JournalSchema);
+ 

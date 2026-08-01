@@ -122,46 +122,106 @@ const Chatbot = () => {
 
     if (!explicitMessage) setInput('');
 
-    const optimistic = {
-      _id: `temp-${Date.now()}`,
+    const userMsgId = `user-${Date.now()}`;
+    const botMsgId = `bot-${Date.now()}`;
+
+    const userMessageObj = {
+      _id: userMsgId,
       message: text,
       isUser: true,
       createdAt: new Date().toISOString()
     };
 
-    setMessages((prev) => [...prev, optimistic]);
+    const placeholderBotObj = {
+      _id: botMsgId,
+      message: '',
+      isUser: false,
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages((prev) => [...prev, userMessageObj, placeholderBotObj]);
     setTyping(true);
     setLoading(true);
 
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post(
-        '/api/chatbot/message',
-        { message: text },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await fetch('/api/chatbot/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: text })
+      });
 
-      if (res.data.success) {
-        setMessages((prev) => [
-          ...prev.filter((item) => item._id !== optimistic._id),
-          res.data.data.userMessage,
-          res.data.data.botMessage
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            _id: `error-${Date.now()}`,
-            message: 'Something went wrong. Please try again.',
-            isUser: false,
-            createdAt: new Date().toISOString()
+      // Check if server returned direct JSON (e.g., Crisis middleware or error)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setMessages((prev) => [
+            ...prev.filter((m) => m._id !== userMsgId && m._id !== botMsgId),
+            data.data.userMessage,
+            data.data.botMessage
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev.filter((m) => m._id !== botMsgId),
+            {
+              _id: `error-${Date.now()}`,
+              message: data.error || 'Something went wrong. Please try again.',
+              isUser: false,
+              createdAt: new Date().toISOString()
+            }
+          ]);
+        }
+        return;
+      }
+
+      // Stream SSE chunks
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = '';
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const payload = JSON.parse(trimmed.slice(6));
+              if (payload.token) {
+                accumulatedText += payload.token;
+                const currentText = accumulatedText;
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg._id === botMsgId ? { ...msg, message: currentText } : msg
+                  )
+                );
+              } else if (payload.done && payload.data) {
+                setMessages((prev) => [
+                  ...prev.filter((m) => m._id !== userMsgId && m._id !== botMsgId),
+                  payload.data.userMessage,
+                  payload.data.botMessage
+                ]);
+              }
+            } catch (err) {
+              console.error('SSE parse error:', err);
+            }
           }
-        ]);
+        }
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error sending streaming message:', error);
       setMessages((prev) => [
-        ...prev,
+        ...prev.filter((m) => m._id !== botMsgId),
         {
           _id: `error-${Date.now()}`,
           message: "I'm having trouble connecting right now. Please try again in a moment.",

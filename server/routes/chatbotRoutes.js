@@ -5,15 +5,41 @@
 const express = require('express');
 const router = express.Router();
 const Chat = require('../models/Chat');
+const Mood = require('../models/Mood');
+const Journal = require('../models/Journal');
 const { protect: auth } = require('../middleware/auth');
 const crisisDetection = require('../middleware/crisisDetection');
-const { chat: ragChat, initRagChain } = require('../langchain/ragChain');
+const { chat: ragChat, chatStream, initRagChain } = require('../langchain/ragChain');
 
 // ─── Warm up RAG chain at route load time ─────────────────────────────────
-// (vector store + model load happens once; subsequent requests are fast)
 initRagChain().catch((err) =>
   console.error('RAG chain init error:', err.message)
 );
+
+/**
+ * Helper to fetch recent wellness context (Moods & Journal entries) for user context fusion
+ */
+async function getUserWellnessContext(userId) {
+  try {
+    const recentMoods = await Mood.find({ user: userId }).sort({ date: -1 }).limit(3);
+    const recentJournals = await Journal.find({ user: userId }).sort({ date: -1 }).limit(2);
+
+    let contextStr = '';
+    if (recentMoods && recentMoods.length > 0) {
+      const moodSummaries = recentMoods.map(m => `Score: ${m.mood}/5 (${m.notes || 'No note'}), tags: [${(m.tags || []).join(', ')}]`);
+      contextStr += `Recent Mood Logs: ${moodSummaries.join(' | ')}. `;
+    }
+
+    if (recentJournals && recentJournals.length > 0) {
+      const journalSummaries = recentJournals.map(j => `Title: "${j.title}" - ${j.content ? j.content.slice(0, 100) : ''}...`);
+      contextStr += `Recent Journal Entries: ${journalSummaries.join(' | ')}.`;
+    }
+
+    return contextStr || 'User has no recent mood or journal entries.';
+  } catch (err) {
+    return 'Context retrieval unavailable.';
+  }
+}
 
 // ─── GET /api/chatbot/messages — fetch chat history ───────────────────────
 router.get('/messages', auth, async (req, res) => {
@@ -26,14 +52,12 @@ router.get('/messages', auth, async (req, res) => {
   }
 });
 
-// ─── POST /api/chatbot/message — RAG-powered response ────────────────────
-// Rate limited in server.js (20 messages / 15 min)
+// ─── POST /api/chatbot/message — Standard RAG-powered response ────────────
 router.post('/message', auth, crisisDetection, async (req, res) => {
   try {
     const { message } = req.body;
     const userId = req.user.id;
 
-    // Input validation
     if (!message || message.trim().length === 0) {
       return res.status(400).json({ success: false, error: 'Message cannot be empty' });
     }
@@ -41,11 +65,9 @@ router.post('/message', auth, crisisDetection, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Message too long. Max 1000 characters.' });
     }
 
-    // Call RAG chain — retrieves KB context, applies few-shot + CoT prompting,
-    // and auto-persists both user + bot messages to MongoDB via MongoDBChatMessageHistory
-    const replyText = await ragChat({ message: message.trim(), userId });
+    const userContext = await getUserWellnessContext(userId);
+    const replyText = await ragChat({ message: message.trim(), userId, userContext });
 
-    // Build response objects matching frontend format
     const userMessage = {
       _id: `user-${Date.now()}`,
       message: message.trim(),
@@ -68,6 +90,62 @@ router.post('/message', auth, crisisDetection, async (req, res) => {
   } catch (error) {
     console.error('RAG chatbot error:', error.message);
     res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
+  }
+});
+
+// ─── POST /api/chatbot/stream — SSE Token Streaming RAG Response ────────
+router.post('/stream', auth, crisisDetection, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const userId = req.user.id;
+
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'Message cannot be empty' });
+    }
+
+    // Set Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const userContext = await getUserWellnessContext(userId);
+
+    let accumulatedAnswer = '';
+    await chatStream({
+      message: message.trim(),
+      userId,
+      userContext,
+      onToken: (token) => {
+        accumulatedAnswer += token;
+        res.write(`data: ${JSON.stringify({ token })}\n\n`);
+      }
+    });
+
+    const userMessage = {
+      _id: `user-${Date.now()}`,
+      message: message.trim(),
+      isUser: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const botMessage = {
+      _id: `bot-${Date.now()}`,
+      message: accumulatedAnswer,
+      isUser: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    res.write(`data: ${JSON.stringify({ done: true, data: { userMessage, botMessage } })}\n\n`);
+    res.end();
+
+  } catch (error) {
+    console.error('Streaming RAG chatbot error:', error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'Streaming error occurred.' });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: 'Streaming interrupted' })}\n\n`);
+      res.end();
+    }
   }
 });
 

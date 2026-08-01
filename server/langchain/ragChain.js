@@ -71,13 +71,17 @@ const initRagChain = async () => {
  * Send a message through the RAG chain.
  * @param {string} message - User's message
  * @param {string} userId  - MongoDB user ID (used as session key)
+ * @param {string} [userContext] - Optional user mood/journal context
  * @returns {Promise<string>} - AI response
  */
-const chat = async ({ message, userId }) => {
+const chat = async ({ message, userId, userContext }) => {
   const chain = await initRagChain();
 
   const result = await chain.invoke(
-    { input: message },
+    { 
+      input: message,
+      user_context: userContext || 'No previous mood/journal logs recorded yet.'
+    },
     {
       configurable: {
         sessionId: userId.toString(),
@@ -89,4 +93,42 @@ const chat = async ({ message, userId }) => {
   return result.answer;
 };
 
-module.exports = { initRagChain, chat };
+/**
+ * Stream a message response token-by-token through the RAG chain.
+ * @param {string} message - User's message
+ * @param {string} userId  - MongoDB user ID
+ * @param {string} [userContext] - Optional user mood/journal context
+ * @param {function(string): void} onToken - Token callback handler
+ * @returns {Promise<string>} - Complete accumulated response text
+ */
+const chatStream = async ({ message, userId, userContext, onToken }) => {
+  const chain = await initRagChain();
+
+  const stream = await chain.stream(
+    { 
+      input: message,
+      user_context: userContext || 'No previous mood/journal logs recorded yet.'
+    },
+    {
+      configurable: {
+        sessionId: userId.toString(),
+        userId: userId.toString(),
+      },
+    }
+  );
+
+  let fullAnswer = '';
+  for await (const chunk of stream) {
+    if (chunk.answer) {
+      fullAnswer += chunk.answer;
+      if (onToken) {
+        onToken(chunk.answer);
+      }
+    }
+  }
+
+  return fullAnswer;
+};
+
+module.exports = { initRagChain, chat, chatStream };
+

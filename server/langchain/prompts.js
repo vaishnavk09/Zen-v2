@@ -38,6 +38,9 @@ YOUR ROLE:
 - Encourage professional help when appropriate
 - Keep responses concise (2-4 paragraphs max) and conversational
 
+USER's RECENT WELLNESS & MOOD CONTEXT:
+{user_context}
+
 YOUR LIMITS:
 - Never diagnose any condition
 - Never recommend specific medications
@@ -82,3 +85,4 @@ const chatPrompt = ChatPromptTemplate.fromMessages([
 ]);
 
 module.exports = { chatPrompt, historyAwarePrompt };
+
