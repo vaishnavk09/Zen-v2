@@ -68,6 +68,8 @@ const MoodTracker = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [aiInsights, setAiInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   
   // Mood options
   const moodOptions = [
@@ -83,10 +85,30 @@ const MoodTracker = () => {
     { value: 10, emoji: '🥳', label: 'Perfect' }
   ];
   
-  // Fetch mood entries on component mount
+  // Fetch mood entries and AI insights on component mount
   useEffect(() => {
     fetchMoodEntries();
+    fetchAiInsights();
   }, []);
+
+  // Fetch AI-powered emotional insights from backend
+  const fetchAiInsights = async () => {
+    try {
+      setInsightsLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await axios.get('/api/mood/insights', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data?.success) {
+        setAiInsights(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching AI insights:', error);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
   
   // Fetch mood entries from API
   const fetchMoodEntries = async () => {
@@ -568,16 +590,179 @@ const MoodTracker = () => {
         </Grid>
       </Grid>
       
-      {/* Recent Entries */}
-      <Card 
+      {/* AI Emotional Insights Card */}
+      <Card
         className="zen-feature-card"
-        elevation={3} 
+        elevation={3}
+        sx={{
+          borderRadius: 3,
+          overflow: 'hidden',
+          mt: 3,
+          background: darkMode
+            ? 'linear-gradient(135deg, rgba(124,111,224,0.18) 0%, rgba(135,211,248,0.10) 100%)'
+            : 'linear-gradient(135deg, rgba(124,111,224,0.08) 0%, rgba(135,211,248,0.06) 100%)',
+          border: darkMode
+            ? '1px solid rgba(155, 145, 232, 0.30)'
+            : '1px solid rgba(124, 111, 224, 0.20)'
+        }}
+        component={motion.div}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+      >
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ fontSize: '1.4rem' }}>🧠</Box>
+              <Typography variant="h5">AI Emotional Insights</Typography>
+            </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={fetchAiInsights}
+              disabled={insightsLoading}
+              sx={{ borderRadius: 2, fontSize: '0.75rem' }}
+            >
+              {insightsLoading ? 'Analysing...' : 'Refresh'}
+            </Button>
+          </Box>
+
+          {insightsLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <CircularProgress size={20} />
+              <Typography variant="body2" color="text.secondary">
+                LLaMA 3.3 70B is analysing your mood patterns...
+              </Typography>
+            </Box>
+          ) : aiInsights ? (
+            <Box>
+              {/* Main Insight Text */}
+              <Typography
+                variant="body1"
+                sx={{
+                  mb: 2.5,
+                  lineHeight: 1.75,
+                  color: 'text.primary',
+                  fontStyle: 'italic',
+                  borderLeft: '3px solid',
+                  borderColor: 'primary.main',
+                  pl: 2
+                }}
+              >
+                {aiInsights.insights}
+              </Typography>
+
+              {/* Stats Row */}
+              <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                {aiInsights.stabilityScore != null && (
+                  <Grid item xs={6} sm={3}>
+                    <Paper
+                      elevation={0}
+                      sx={{ p: 1.5, borderRadius: 2, textAlign: 'center', bgcolor: 'background.default' }}
+                    >
+                      <Typography variant="h5" color="primary.main" fontWeight={700}>
+                        {aiInsights.stabilityScore}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Stability /100
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+                {aiInsights.averageMood != null && (
+                  <Grid item xs={6} sm={3}>
+                    <Paper
+                      elevation={0}
+                      sx={{ p: 1.5, borderRadius: 2, textAlign: 'center', bgcolor: 'background.default' }}
+                    >
+                      <Typography variant="h5" color="primary.main" fontWeight={700}>
+                        {aiInsights.averageMood}/5
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Avg Mood
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+                {aiInsights.totalEntries != null && (
+                  <Grid item xs={6} sm={3}>
+                    <Paper
+                      elevation={0}
+                      sx={{ p: 1.5, borderRadius: 2, textAlign: 'center', bgcolor: 'background.default' }}
+                    >
+                      <Typography variant="h5" color="primary.main" fontWeight={700}>
+                        {aiInsights.totalEntries}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Entries Analysed
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+              </Grid>
+
+              {/* Identified Triggers */}
+              {aiInsights.topTriggers && aiInsights.topTriggers.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                    Identified Patterns
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {aiInsights.topTriggers.map((trigger, i) => (
+                      <Chip
+                        key={i}
+                        label={trigger}
+                        size="small"
+                        sx={{
+                          bgcolor: darkMode ? 'rgba(124,111,224,0.2)' : 'rgba(124,111,224,0.1)',
+                          color: 'primary.main',
+                          border: '1px solid',
+                          borderColor: 'primary.light',
+                          borderRadius: 1
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Recommendation */}
+              {aiInsights.recommendation && (
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: darkMode ? 'rgba(135,211,248,0.10)' : 'rgba(135,211,248,0.12)',
+                    border: '1px solid',
+                    borderColor: 'secondary.dark'
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    💡 Recommendation
+                  </Typography>
+                  <Typography variant="body2">{aiInsights.recommendation}</Typography>
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Log at least 3 mood entries to unlock your personalised AI emotional insights.
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Entries */}
+      <Card
+        className="zen-feature-card"
+        elevation={3}
         sx={{ borderRadius: 3, overflow: 'hidden', mt: 3 }}
         component={motion.div}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
+
         <CardContent sx={{ p: 3 }}>
           <Typography variant="h5" gutterBottom>
             Recent Entries

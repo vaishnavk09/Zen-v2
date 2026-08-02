@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const connectDB = require('./config/db');
 const rateLimit = require('express-rate-limit');
+const { swaggerUi, swaggerSpec } = require('./config/swagger');
 
 // Load environment variables
 dotenv.config();
@@ -27,12 +28,29 @@ const chatLimiter = rateLimit({
 });
 
 app.use('/api/chatbot/message', chatLimiter);
+
 // Import routes
 const userRoutes = require('./routes/userRoutes');
 const journalRoutes = require('./routes/journalRoutes');
 const moodRoutes = require('./routes/moodRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+
+// ─── Swagger API Docs (/api/docs) ─────────────────────────────────────────
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'Zen API Docs',
+  customCss: '.swagger-ui .topbar { background-color: #7C6FE0; } .swagger-ui .topbar-wrapper .link span { display: none; }',
+  swaggerOptions: {
+    persistAuthorization: true,
+    docExpansion: 'list'
+  }
+}));
+
+// Expose raw OpenAPI spec as JSON
+app.get('/api/docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // Use API routes FIRST
 app.use('/api/users', userRoutes);
@@ -42,6 +60,7 @@ app.use('/api/mood', moodRoutes);
 app.use('/api/moods', moodRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use("/api/contact", contactRoutes);
+
 // Serve static assets ONLY after API routes
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
@@ -66,4 +85,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`📖 API Docs available at http://localhost:${PORT}/api/docs`);
 });

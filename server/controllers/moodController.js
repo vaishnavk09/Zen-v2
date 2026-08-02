@@ -291,4 +291,91 @@ exports.deleteMood = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-}; 
+};
+
+// @desc    Get AI-powered emotional correlation insights for a user
+// @route   GET /api/mood/insights
+// @access  Private
+exports.getMoodInsights = async (req, res, next) => {
+  try {
+    const moods = await Mood.find({ user: req.user.id })
+      .sort({ date: -1 })
+      .limit(14); // Last 14 days
+
+    if (!moods || moods.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          insights: 'Start logging your mood daily to unlock AI-powered emotional insights and personalized wellness patterns.',
+          stabilityScore: null,
+          topTriggers: [],
+          recommendation: 'Log at least 3 mood entries to receive your first AI insights.'
+        }
+      });
+    }
+
+    // Build a structured summary for LLM
+    const moodSummary = moods.map((m, i) => {
+      const date = new Date(m.date).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
+      return `Day ${i + 1} (${date}): Score ${m.mood}/5, Tags: [${(m.tags || []).join(', ') || 'none'}], Activities: [${(m.activities || []).join(', ') || 'none'}], Note: "${m.notes || 'No note'}"`;
+    }).join('\n');
+
+    const avgMood = (moods.reduce((sum, m) => sum + m.mood, 0) / moods.length).toFixed(1);
+    const allTags = moods.flatMap(m => m.tags || []);
+    const tagFrequency = allTags.reduce((acc, tag) => {
+      acc[tag] = (acc[tag] || 0) + 1;
+      return acc;
+    }, {});
+    const topTags = Object.entries(tagFrequency).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag]) => tag);
+
+    const Groq = require('groq-sdk');
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an empathetic emotional analytics assistant for a mental wellness app. Analyze the user's mood log data and return a JSON response with:
+1. "insights": A warm, 2-3 sentence summary of the user's emotional patterns and key correlations.
+2. "stabilityScore": An integer 1-100 representing emotional stability (based on variance in scores).
+3. "topTriggers": Array of up to 3 identified emotional trigger patterns (e.g., "Work stress on weekdays", "Improved mood after exercise").
+4. "recommendation": One concise, actionable, evidence-based wellness suggestion.
+Return ONLY valid JSON with these four keys.`
+        },
+        {
+          role: 'user',
+          content: `Please analyze my mood logs from the past ${moods.length} days. Average mood: ${avgMood}/5. Most frequent tags: ${topTags.join(', ')}.\n\nDetailed Log:\n${moodSummary}`
+        }
+      ],
+      temperature: 0.5,
+      max_tokens: 512,
+      response_format: { type: 'json_object' }
+    });
+
+    let insightData;
+    try {
+      insightData = JSON.parse(completion.choices[0].message.content);
+    } catch {
+      insightData = {
+        insights: completion.choices[0].message.content,
+        stabilityScore: null,
+        topTriggers: topTags,
+        recommendation: 'Continue logging your mood daily for deeper insights.'
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...insightData,
+        averageMood: parseFloat(avgMood),
+        totalEntries: moods.length,
+        topTags
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
